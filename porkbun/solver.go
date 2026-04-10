@@ -27,7 +27,7 @@ import (
 const SolverName = "porkbun"
 
 // DefaultAPIBase is the default Porkbun API base URL.
-const DefaultAPIBase = "https://porkbun.com/api/json/v3"
+const DefaultAPIBase = "https://api.porkbun.com/api/json/v3"
 
 // solver implements webhook.Solver for Porkbun.
 type solver struct {
