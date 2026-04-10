@@ -331,11 +331,6 @@ type porkbunCreateRecordRequest struct {
 	TTL          int    `json:"ttl,omitempty"`
 }
 
-type porkbunDeleteRecordRequest struct {
-	porkbunAuth
-	RecordID string `json:"recordid"`
-}
-
 func (s *solver) baseURL(cfg config) string {
 	if cfg.APIBase != "" {
 		return cfg.APIBase
