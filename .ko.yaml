@@ -1,0 +1,10 @@
+defaultBaseImage: cgr.dev/chainguard/static:latest
+defaultPlatforms:
+  - linux/amd64
+
+builds:
+  - id: webhook
+    dir: .
+    main: .
+    env:
+      - CGO_ENABLED=0
