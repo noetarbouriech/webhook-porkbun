@@ -111,21 +111,43 @@ func (s *solver) Present(ch *acme.ChallengeRequest) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 
-	exists, err := s.txtRecordExists(ctx, apiKey, secretKey, zone, name, ch.Key)
+	records, err := s.listRecords(ctx, apiKey, secretKey, zone)
 	if err != nil {
 		return err
 	}
-	if exists {
-		logf("present: exists zone=%s name=%s", zone, name)
+
+	var txtAtName int
+	var exact bool
+	for _, r := range records {
+		if !strings.EqualFold(r.Type, "TXT") {
+			continue
+		}
+		if !fqdnEq(normalizeRecordName(r.Name, zone), name) {
+			continue
+		}
+		txtAtName++
+		if r.Content == ch.Key {
+			exact = true
+			break
+		}
+	}
+
+	logf("present: zone=%s name=%s existing_txt=%d exact=%t", zone, name, txtAtName, exact)
+
+	if exact {
 		return nil
 	}
 
 	if _, err := s.createRecord(ctx, zone, rec); err != nil {
-		// Retry once by re-checking existence (race with another controller instance).
-		existsAfter, checkErr := s.txtRecordExists(ctx, apiKey, secretKey, zone, name, ch.Key)
-		if checkErr == nil && existsAfter {
-			logf("present: created by another instance zone=%s name=%s", zone, name)
-			return nil
+		// Retry once by re-listing (race with another controller instance).
+		recordsAfter, listErr := s.listRecords(ctx, apiKey, secretKey, zone)
+		if listErr == nil {
+			for _, r := range recordsAfter {
+				if strings.EqualFold(r.Type, "TXT") && fqdnEq(normalizeRecordName(r.Name, zone), name) && r.Content == ch.Key {
+					logf("present: created by another instance zone=%s name=%s", zone, name)
+					return nil
+				}
+			}
 		}
 		return err
 	}
@@ -339,11 +361,10 @@ func (s *solver) createRecord(ctx context.Context, zone string, req porkbunCreat
 }
 
 func (s *solver) deleteRecord(ctx context.Context, apiKey, secretKey, zone, recordID string) error {
-	url := strings.TrimRight(s.apiBase, "/") + "/dns/delete/" + zone
-	req := porkbunDeleteRecordRequest{
-		porkbunAuth: porkbunAuth{APIKey: apiKey, SecretAPIKey: secretKey},
-		RecordID:    recordID,
-	}
+	// Porkbun requires the record ID in the URL path for delete.
+	// Endpoint: POST /dns/delete/{domain}/{recordID}
+	url := strings.TrimRight(s.apiBase, "/") + "/dns/delete/" + zone + "/" + recordID
+	req := porkbunAuth{APIKey: apiKey, SecretAPIKey: secretKey}
 	_, err := s.do(ctx, url, req)
 	return err
 }
