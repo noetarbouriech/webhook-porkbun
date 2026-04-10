@@ -1,10 +1,8 @@
-name: image
+name: Publish
 
 on:
   push:
     branches: ["main"]
-    tags: ["v*"]
-  pull_request:
   workflow_dispatch:
 
 permissions:
@@ -12,61 +10,26 @@ permissions:
   packages: write
 
 env:
-  REGISTRY: ghcr.io
+  KO_DOCKER_REPO: ghcr.io/noetarbouriech/webhook-porkbun
 
 jobs:
-  build-and-publish:
+  publish:
+    name: Publish
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Set up Go
-        uses: actions/setup-go@v5
+      - uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
           cache: true
 
-      - name: Install ko
+      - uses: ko-build/setup-ko@v0.8
+
+      - name: Build and publish
         shell: bash
         run: |
           set -euo pipefail
-          go install ko.build/ko@latest
-
-      - name: Log in to GHCR
-        if: github.event_name != 'pull_request'
-        shell: bash
-        run: |
-          set -euo pipefail
-          echo "${{ secrets.GITHUB_TOKEN }}" | ko login ghcr.io --username "${{ github.actor }}" --password-stdin
-
-      - name: Build (PR, no publish)
-        if: github.event_name == 'pull_request'
-        env:
-          KO_DOCKER_REPO: ko.local
-        shell: bash
-        run: |
-          set -euo pipefail
-          ko build --bare --platform=linux/amd64 --local .
-
-      - name: Build and publish (push/tag)
-        if: github.event_name != 'pull_request'
-        env:
-          KO_DOCKER_REPO: ghcr.io/${{ github.repository }}
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
-            VERSION="${GITHUB_REF_NAME#v}"
-            TAGS="${VERSION}"
-          else
-            TAGS="main"
-          fi
-
-          ko build --bare --platform=linux/amd64 --tags="${TAGS}" .
-
-          if [ "${GITHUB_REF_TYPE}" != "tag" ]; then
-            ko build --bare --platform=linux/amd64 --tags=latest .
-          fi
+          SHA_TAG="sha-${GITHUB_SHA::7}"
+          ko build --bare --platform=linux/amd64 --tags="main,latest,${SHA_TAG}" .
